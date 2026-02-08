@@ -1,0 +1,7 @@
+{
+  "name": "Mundo VPN - AI Empowered Security",
+  "description": "A high-performance VPN interface featuring a built-in AI assistant for real-time security optimization, server selection, and technical support.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
