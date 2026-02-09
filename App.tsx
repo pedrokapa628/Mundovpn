@@ -50,6 +50,7 @@ const App: React.FC = () => {
   });
 
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
+  const [sessionDuration, setSessionDuration] = useState(0); // in seconds
   const [selectedServer, setSelectedServer] = useState<Server>(SERVERS[3]); // Default SP
   const [stats, setStats] = useState<TrafficStats[]>([]);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'servers' | 'ai' | 'panel'>('dashboard');
@@ -83,6 +84,13 @@ const App: React.FC = () => {
     setLogs(prev => [...prev.slice(-10), `[${new Date().toLocaleTimeString()}] ${msg}`]);
   }, []);
 
+  const formatSeconds = (totalSeconds: number) => {
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    return [h, m, s].map(v => v < 10 ? "0" + v : v).join(":");
+  };
+
   const formatDuration = (ms: number) => {
     const minutes = Math.floor(ms / 60000);
     const hours = Math.floor(minutes / 60);
@@ -99,6 +107,7 @@ const App: React.FC = () => {
       
       addLog('Disconnecting from ' + selectedServer.name);
       setConnectionStatus('disconnected');
+      setSessionDuration(0);
 
       // Create new persistent log entry
       const newLog: HistoryItem = {
@@ -143,6 +152,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const interval = setInterval(() => {
       if (connectionStatus === 'connected') {
+        setSessionDuration(prev => prev + 1);
         const dl = Math.random() * 15 + 5;
         const ul = Math.random() * 5 + 1;
         const newStat: TrafficStats = {
@@ -169,8 +179,17 @@ const App: React.FC = () => {
     setInputValue('');
     setIsAiThinking(true);
     
+    const startTime = performance.now();
     const response = await getAIResponse(inputValue, messages, { status: connectionStatus, server: selectedServer });
-    const aiMsg: ChatMessage = { role: 'assistant', content: String(response), timestamp: Date.now() };
+    const endTime = performance.now();
+    const responseLatency = (endTime - startTime) / 1000; // in seconds
+
+    const aiMsg: ChatMessage = { 
+      role: 'assistant', 
+      content: String(response), 
+      timestamp: Date.now(),
+      latency: responseLatency
+    };
     setMessages(prev => [...prev, aiMsg]);
     setIsAiThinking(false);
   };
@@ -227,25 +246,31 @@ const App: React.FC = () => {
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             
             {/* Hero Connect */}
-            <div className="relative flex flex-col items-center justify-center py-12 bg-gray-900/50 rounded-3xl border border-gray-800 overflow-hidden">
+            <div className="relative flex flex-col items-center justify-center py-10 bg-gray-900/50 rounded-3xl border border-gray-800 overflow-hidden">
                <div className={`absolute inset-0 transition-opacity duration-1000 opacity-20 ${connectionStatus === 'connected' ? 'bg-green-500' : 'bg-blue-600'}`} />
                
                <button 
                 onClick={toggleConnection}
                 disabled={connectionStatus === 'connecting'}
                 className={`relative z-10 w-32 h-32 rounded-full flex items-center justify-center transition-all duration-500 
-                  ${connectionStatus === 'connected' ? 'bg-green-600 neon-glow-active ring-4 ring-green-500/20' : 'bg-gray-800 hover:bg-gray-700 neon-glow ring-4 ring-blue-500/10'}
+                  ${connectionStatus === 'connected' ? 'bg-green-600 neon-glow-active ring-4 ring-green-500/20 shadow-[0_0_50px_rgba(34,197,94,0.3)]' : 'bg-gray-800 hover:bg-gray-700 neon-glow ring-4 ring-blue-500/10'}
                   ${connectionStatus === 'connecting' ? 'animate-pulse' : ''}
                 `}
                >
                  <Power className={`w-12 h-12 ${connectionStatus === 'connected' ? 'text-white' : 'text-blue-500'}`} />
                </button>
                
-               <div className="mt-8 text-center z-10">
+               <div className="mt-6 text-center z-10">
                  <h2 className="text-lg font-bold tracking-wide">
                    {connectionStatus === 'connected' ? 'CONEXÃO ATIVA' : connectionStatus === 'connecting' ? 'INICIANDO TUNEL...' : 'PROTEÇÃO DESATIVADA'}
                  </h2>
-                 <p className="text-sm text-gray-400 mt-1">
+                 {connectionStatus === 'connected' && (
+                   <div className="flex items-center justify-center gap-2 mt-2 py-1 px-4 bg-green-500/10 border border-green-500/20 rounded-full">
+                     <Clock className="w-3.5 h-3.5 text-green-500 animate-pulse" />
+                     <span className="text-sm font-mono font-bold text-green-400">{formatSeconds(sessionDuration)}</span>
+                   </div>
+                 )}
+                 <p className="text-xs text-gray-400 mt-2">
                    {connectionStatus === 'connected' ? `Tunelado por ${selectedServer.name}` : 'Toque para criptografar seu tráfego'}
                  </p>
                </div>
@@ -558,12 +583,18 @@ const App: React.FC = () => {
                  </div>
                )}
                {messages.map((m, i) => (
-                 <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                 <div key={i} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
                     <div className={`max-w-[85%] p-3.5 rounded-2xl text-sm leading-relaxed ${m.role === 'user' ? 'bg-blue-600 text-white rounded-br-none shadow-lg' : 'glass rounded-bl-none'}`}>
                       {m.content}
                     </div>
+                    {m.role === 'assistant' && m.latency && (
+                      <div className="mt-1 ml-1 flex items-center gap-1 text-[9px] font-bold text-gray-500 uppercase tracking-tighter">
+                        <Bolt className="w-2.5 h-2.5 text-yellow-500" />
+                        Gerado em {m.latency.toFixed(2)}s
+                      </div>
+                    )}
                  </div>
-               )}
+               ))}
                {isAiThinking && (
                  <div className="flex justify-start">
                    <div className="glass p-3.5 rounded-2xl rounded-bl-none flex items-center gap-2">
